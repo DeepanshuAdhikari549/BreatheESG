@@ -41,6 +41,10 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`;
     config.headers['X-Organisation-Slug'] = ORG_SLUG;
   }
+  // FormData must not use application/json or a manual multipart type (no boundary).
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
   return config;
 });
 

@@ -211,6 +211,36 @@ export default function App() {
     setPassword('password123');
   };
 
+  const formatApiError = (err, fallback) => {
+    const data = err.response?.data;
+    if (!data) return fallback;
+    if (typeof data.detail === 'string') return data.detail;
+    if (data.error_message) return data.error_message;
+    if (typeof data === 'object') {
+      const first = Object.values(data).flat()[0];
+      if (typeof first === 'string') return first;
+    }
+    return fallback;
+  };
+
+  const handleUploadResponse = (data, successText) => {
+    if (data.status === 'FAILED') {
+      setUploadMessage({
+        type: 'error',
+        text: data.error_message || 'Batch processing failed. Check the CSV format matches the selected source channel.',
+      });
+      return;
+    }
+    if (data.total_rows === 0) {
+      setUploadMessage({
+        type: 'error',
+        text: 'No rows could be parsed. Use a CSV with headers matching the selected source (SAP, Utility, or Travel), or try an Instant Review Preset.',
+      });
+      return;
+    }
+    setUploadMessage({ type: 'success', text: successText });
+  };
+
   const handleFileUpload = async (e) => {
     e.preventDefault();
     if (!uploadFile) return;
@@ -222,16 +252,14 @@ export default function App() {
     formData.append('source_type', uploadSource);
     
     try {
-      await api.post('/uploads/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setUploadMessage({ type: 'success', text: 'Batch uploaded and processed successfully!' });
+      const res = await api.post('/uploads/', formData);
+      handleUploadResponse(res.data, 'Batch uploaded and processed successfully!');
       setUploadFile(null);
-      // Reset input element
       document.getElementById('file-upload-input').value = '';
       fetchUploads();
+      fetchDashboard();
     } catch (err) {
-      setUploadMessage({ type: 'error', text: err.response?.data?.detail || 'Failed to upload batch.' });
+      setUploadMessage({ type: 'error', text: formatApiError(err, 'Failed to upload batch.') });
     } finally {
       setUploadLoading(false);
     }
@@ -249,13 +277,12 @@ export default function App() {
     formData.append('source_type', sourceType);
     
     try {
-      await api.post('/uploads/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setUploadMessage({ type: 'success', text: `Sample ${sourceType} data injected and parsed successfully!` });
+      const res = await api.post('/uploads/', formData);
+      handleUploadResponse(res.data, `Sample ${sourceType} data injected and parsed successfully!`);
       fetchUploads();
+      fetchDashboard();
     } catch (err) {
-      setUploadMessage({ type: 'error', text: err.response?.data?.detail || 'Failed to inject sample.' });
+      setUploadMessage({ type: 'error', text: formatApiError(err, 'Failed to inject sample.') });
     } finally {
       setUploadLoading(false);
     }

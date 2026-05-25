@@ -11,7 +11,7 @@ from . import services
 logger = logging.getLogger(__name__)
 
 
-class UploadBatchViewSet(viewsets.ReadOnlyModelViewSet):
+class UploadBatchViewSet(viewsets.ModelViewSet):
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [permissions.IsAuthenticated]
     filterset_fields = ["source_type", "status"]
@@ -23,9 +23,11 @@ class UploadBatchViewSet(viewsets.ReadOnlyModelViewSet):
         return UploadBatch.objects.filter(organisation=org).select_related("uploaded_by")
 
     def get_serializer_class(self):
-        if self.action == "retrieve":
+        if self.action in ("retrieve", "create"):
             return UploadBatchDetailSerializer
         return UploadBatchSerializer
+
+    http_method_names = ["get", "post", "head", "options"]
 
     def create(self, request, *args, **kwargs):
         org = request.organisation
@@ -62,8 +64,28 @@ class UploadBatchViewSet(viewsets.ReadOnlyModelViewSet):
             batch.refresh_from_db()
         except Exception as exc:
             logger.error("Ingestion failed for batch %s: %s", batch.id, exc)
+            batch.refresh_from_db()
 
         serializer = UploadBatchDetailSerializer(batch)
+        if batch.status == UploadBatch.Status.FAILED:
+            return Response(
+                {
+                    **serializer.data,
+                    "detail": batch.error_message or "Batch processing failed.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if batch.total_rows == 0:
+            return Response(
+                {
+                    **serializer.data,
+                    "detail": (
+                        "No rows could be parsed. Ensure CSV headers match the "
+                        f"selected source type ({source_type})."
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["get"], url_path="records")
