@@ -1,5 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useCallback } from 'react';
+import api, {
+  getStoredToken,
+  setStoredTokens,
+  clearStoredTokens,
+  loginRequest,
+  fetchCurrentUser,
+} from './api/client';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend, Cell, PieChart, Pie
@@ -32,11 +38,13 @@ TRP-1004,EMP-0077,Management,2026-03-10,2026-03-15,FRA,HND,First,9300.0,5,Tokyo,
 TRP-1005,EMP-0077,Management,2026-03-10,2026-03-15,FRA,HND,First,0.0,0,,0.0`;
 
 export default function App() {
-  const [token, setToken] = useState(localStorage.getItem('token') || '');
+  const [token, setToken] = useState(getStoredToken);
   const [user, setUser] = useState(null);
+  const [authChecking, setAuthChecking] = useState(() => !!getStoredToken());
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
   
   // Dashboard & Navigation state
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -68,26 +76,54 @@ export default function App() {
   // Audit log state
   const [auditLogs, setAuditLogs] = useState([]);
   
-  // Base Axios configuration
-  const api = axios.create({
-    baseURL: 'https://breatheesg-khy4.onrender.com/api',
-    headers: token ? {
-      'Authorization': `Bearer ${token}`,
-      'X-Organisation-Slug': 'breathe-esg'
-    } : {}
-  });
+  const handleLogout = useCallback(() => {
+    setToken('');
+    setUser(null);
+    clearStoredTokens();
+  }, []);
 
-  // Load User Data & Init Dashboard when token changes
   useEffect(() => {
-    if (token) {
-      localStorage.setItem('token', token);
-      fetchUser();
-      fetchDashboard();
-    } else {
-      localStorage.removeItem('token');
-      setUser(null);
+    const onForcedLogout = () => handleLogout();
+    window.addEventListener('auth:logout', onForcedLogout);
+    return () => window.removeEventListener('auth:logout', onForcedLogout);
+  }, [handleLogout]);
+
+  const fetchUser = useCallback(async () => {
+    try {
+      const res = await fetchCurrentUser();
+      setUser(res.data);
+      return true;
+    } catch (err) {
+      const status = err.response?.status;
+      if (status === 401 || status === 403) {
+        handleLogout();
+      } else {
+        console.error('Failed to fetch user data:', err);
+      }
+      return false;
     }
-  }, [token]);
+  }, [handleLogout]);
+
+  // Restore session when a token exists but user profile is not loaded yet
+  useEffect(() => {
+    if (!token) {
+      setAuthChecking(false);
+      return;
+    }
+    if (user) {
+      setAuthChecking(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setAuthChecking(true);
+      await fetchUser();
+      if (!cancelled) setAuthChecking(false);
+    })();
+
+    return () => { cancelled = true; };
+  }, [token, user, fetchUser]);
 
   // Refetch data depending on active tab
   useEffect(() => {
@@ -98,15 +134,6 @@ export default function App() {
       if (activeTab === 'audit') fetchAuditLogs();
     }
   }, [activeTab, token, user]);
-
-  const fetchUser = async () => {
-    try {
-      const res = await api.get('/auth/me/');
-      setUser(res.data);
-    } catch (err) {
-      handleLogout();
-    }
-  };
 
   const fetchDashboard = async () => {
     try {
@@ -153,24 +180,35 @@ export default function App() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (loginLoading) return;
     setLoginError('');
+    setLoginLoading(true);
     try {
-      const res = await api.post('/auth/login/', { username, password });
-      setToken(res.data.access);
+      const res = await loginRequest(username, password);
+      const { access, refresh, user: loggedInUser } = res.data;
+      setStoredTokens(access, refresh);
+      setToken(access);
+      if (loggedInUser) setUser(loggedInUser);
+      setActiveTab('dashboard');
     } catch (err) {
-      setLoginError(err.response?.data?.detail || 'Invalid username or password.');
+      if (!err.response) {
+        setLoginError('Server is waking up. Please wait a moment and try again.');
+      } else {
+        const detail = err.response?.data?.detail;
+        const message =
+          typeof detail === 'string'
+            ? detail
+            : detail?.non_field_errors?.[0] || 'Invalid username or password.';
+        setLoginError(message);
+      }
+    } finally {
+      setLoginLoading(false);
     }
   };
 
   const handleAutofill = (role) => {
     setUsername(role);
     setPassword('password123');
-  };
-
-  const handleLogout = () => {
-    setToken('');
-    setUser(null);
-    localStorage.removeItem('token');
   };
 
   const handleFileUpload = async (e) => {
@@ -293,6 +331,20 @@ export default function App() {
     }
   };
 
+  if (token && !user && authChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="text-center">
+          <svg className="animate-spin h-10 w-10 text-emerald-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+          </svg>
+          <p className="text-slate-400 text-sm mt-4">Restoring your session...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!token) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950 relative overflow-hidden">
@@ -342,9 +394,16 @@ export default function App() {
 
             <button
               type="submit"
-              className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-all shadow-lg shadow-emerald-900/35 active:scale-[0.98]"
+              disabled={loginLoading}
+              className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-all shadow-lg shadow-emerald-900/35 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
             >
-              Sign In
+              {loginLoading ? (<>
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                </svg>
+                Signing In...
+              </>) : 'Sign In'}
             </button>
           </form>
 
