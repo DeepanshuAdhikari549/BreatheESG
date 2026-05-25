@@ -1,12 +1,20 @@
 import axios from 'axios';
 
-// Direct Render URL — Vercel /api proxy causes redirect loops with Django trailing slashes.
 export const RENDER_API_URL = 'https://breatheesg-khy4.onrender.com/api';
 
-// Always use Render in production (Vercel /api proxy causes redirect loops).
-const API_BASE_URL = import.meta.env.PROD
-  ? RENDER_API_URL
-  : (import.meta.env.VITE_API_URL || 'http://localhost:8000/api');
+/** Same-origin /api on Vercel (proxied to Render). Direct Render URL for local dev. */
+export const getApiBaseUrl = () => {
+  if (!import.meta.env.PROD) {
+    return import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+  }
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.endsWith('.vercel.app') || host.includes('vercel.app')) {
+      return '/api';
+    }
+  }
+  return RENDER_API_URL;
+};
 
 const ORG_SLUG = 'breathe-esg';
 const TOKEN_KEY = 'token';
@@ -30,12 +38,11 @@ export const clearStoredTokens = () => {
 };
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
   timeout: 120000,
 });
 
-const authHeaders = () => {
-  const token = getStoredToken();
+const authHeaders = (accessToken) => {
+  const token = accessToken || getStoredToken();
   const headers = {};
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -45,6 +52,7 @@ const authHeaders = () => {
 };
 
 api.interceptors.request.use((config) => {
+  config.baseURL = getApiBaseUrl();
   Object.assign(config.headers, authHeaders());
   if (config.data && !(config.data instanceof FormData)) {
     config.headers['Content-Type'] = 'application/json';
@@ -52,38 +60,73 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+const uploadTimeoutMs = 180000;
+
 /** File uploads via fetch — avoids axios forcing application/json on FormData. */
-export const uploadBatch = async (file, sourceType) => {
+export const uploadBatch = async (file, sourceType, accessToken) => {
+  const token = accessToken || getStoredToken();
+  if (!token) {
+    const err = new Error('Your session expired. Please sign in again.');
+    err.response = { status: 401, data: { detail: err.message } };
+    throw err;
+  }
+
+  await wakeServer(3);
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('source_type', sourceType);
 
-  const response = await fetch(`${API_BASE_URL}/uploads/`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: formData,
-  });
+  const url = `${getApiBaseUrl()}/uploads/`;
+  let lastError;
 
-  let data = {};
-  try {
-    data = await response.json();
-  } catch {
-    data = {};
-  }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), uploadTimeoutMs);
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      clearStoredTokens();
-      window.dispatchEvent(new Event('auth:logout'));
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: formData,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timer);
+
+      let data = {};
+      const text = await response.text();
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { detail: text?.slice(0, 200) || `Server error (${response.status})` };
+      }
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          clearStoredTokens();
+          window.dispatchEvent(new Event('auth:logout'));
+        }
+        const msg =
+          typeof data.detail === 'string'
+            ? data.detail
+            : data.error_message || `Upload failed (HTTP ${response.status})`;
+        const err = new Error(msg);
+        err.response = { status: response.status, data };
+        throw err;
+      }
+
+      return { data };
+    } catch (err) {
+      clearTimeout(timer);
+      lastError = err;
+      if (err.response || attempt >= 2) throw err;
+      await wakeServer(2);
+      await sleep(2000);
     }
-    const err = new Error(
-      typeof data.detail === 'string' ? data.detail : 'Failed to upload batch.'
-    );
-    err.response = { status: response.status, data };
-    throw err;
   }
 
-  return { data };
+  throw lastError;
 };
 
 let refreshPromise = null;
@@ -94,7 +137,7 @@ const refreshAccessToken = async () => {
 
   if (!refreshPromise) {
     refreshPromise = axios
-      .post(`${API_BASE_URL}/auth/refresh/`, { refresh }, { timeout: 120000 })
+      .post(`${getApiBaseUrl()}/auth/refresh/`, { refresh }, { timeout: 120000 })
       .then((res) => {
         const access = res.data?.access;
         if (access) {
@@ -144,7 +187,7 @@ api.interceptors.response.use(
 export const wakeServer = async (maxAttempts = 6) => {
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const res = await axios.get(`${RENDER_API_URL}/health/`, {
+      const res = await axios.get(`${getApiBaseUrl()}/health/`, {
         timeout: 90000,
       });
       if (res.status === 200) return true;

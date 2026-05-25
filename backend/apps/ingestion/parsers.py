@@ -15,16 +15,18 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-def _read_csv(filepath: str) -> pd.DataFrame:
-    """Read CSV trying utf-8 first, then latin-1."""
+def _read_csv(source) -> pd.DataFrame:
+    """Read CSV from a path or file-like object."""
     for enc in ("utf-8", "utf-8-sig", "latin-1", "cp1252"):
         try:
-            df = pd.read_csv(filepath, encoding=enc)
+            if hasattr(source, "seek"):
+                source.seek(0)
+            df = pd.read_csv(source, encoding=enc)
             df.columns = [str(c).strip() for c in df.columns]
             return df
         except UnicodeDecodeError:
             continue
-    raise ValueError(f"Could not decode file: {filepath}")
+    raise ValueError("Could not decode CSV file.")
 
 
 def _parse_date(value) -> Optional[date]:

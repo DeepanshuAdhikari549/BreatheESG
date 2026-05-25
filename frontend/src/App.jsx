@@ -213,6 +213,13 @@ export default function App() {
   };
 
   const formatApiError = (err, fallback) => {
+    if (err.name === 'AbortError') {
+      return 'Upload timed out. The server may still be starting — try again in a minute.';
+    }
+    if (err.message === 'Failed to fetch') {
+      return 'Cannot reach the server. Check your connection, wait for Render to wake up, then retry.';
+    }
+    if (err.message && err.message !== fallback) return err.message;
     const data = err.response?.data;
     if (!data) return fallback;
     if (typeof data.detail === 'string') return data.detail;
@@ -249,7 +256,7 @@ export default function App() {
     setUploadMessage(null);
     
     try {
-      const res = await uploadBatch(uploadFile, uploadSource);
+      const res = await uploadBatch(uploadFile, uploadSource, token);
       handleUploadResponse(res.data, 'Batch uploaded and processed successfully!');
       setUploadFile(null);
       document.getElementById('file-upload-input').value = '';
@@ -270,7 +277,7 @@ export default function App() {
     const file = new File([blob], filename, { type: 'text/csv' });
     
     try {
-      const res = await uploadBatch(file, sourceType);
+      const res = await uploadBatch(file, sourceType, token);
       handleUploadResponse(res.data, `Sample ${sourceType} data injected and parsed successfully!`);
       fetchUploads();
       fetchDashboard();

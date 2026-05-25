@@ -74,7 +74,8 @@ def process_batch(batch_id: str) -> UploadBatch:
         if parser is None:
             raise ValueError(f"Unknown source type: {batch.source_type}")
 
-        raw_rows = parser.parse(batch.file.path)
+        with batch.file.open("rb") as fh:
+            raw_rows = parser.parse(fh)
         org_stats = _get_org_stats(batch.organisation_id, batch.source_type)
         classifier = ScopeClassifier()
 

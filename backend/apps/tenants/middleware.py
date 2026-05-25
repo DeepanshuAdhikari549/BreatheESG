@@ -3,14 +3,16 @@ from .models import Organisation
 
 
 def _get_organisation(request):
+    if hasattr(request, "user") and request.user.is_authenticated:
+        org = getattr(request.user, "organisation", None)
+        if org is not None:
+            return org
     slug = request.headers.get("X-Organisation-Slug")
     if slug:
         try:
             return Organisation.objects.get(slug=slug, is_active=True)
         except Organisation.DoesNotExist:
             pass
-    if hasattr(request, "user") and request.user.is_authenticated:
-        return getattr(request.user, "organisation", None)
     return None
 
 

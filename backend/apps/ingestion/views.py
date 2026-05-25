@@ -81,12 +81,21 @@ class UploadBatchViewSet(viewsets.ModelViewSet):
                     **serializer.data,
                     "detail": (
                         "No rows could be parsed. Ensure CSV headers match the "
-                        f"selected source type ({source_type})."
+                        f"selected source type ({source_type}). "
+                        "SAP expects columns like Buchungsdatum, Materialbezeichnung, Menge, Einheit, Kraftstofftyp."
                     ),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def list(self, request, *args, **kwargs):
+        if request.organisation is None and request.user.is_authenticated:
+            return Response(
+                {"detail": "No organisation linked to your account."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().list(request, *args, **kwargs)
 
     @action(detail=True, methods=["get"], url_path="records")
     def records(self, request, pk=None):

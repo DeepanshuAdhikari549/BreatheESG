@@ -16,6 +16,11 @@ DEBUG = os.environ.get("DEBUG", "True") == "True"
 
 ALLOWED_HOSTS = ["*"]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://breathe-esg-snowy-rho.vercel.app",
+    "https://breatheesg-khy4.onrender.com",
+]
+
 # Application definition
 DJANGO_APPS = [
     "django.contrib.admin",
@@ -118,7 +123,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT", str(BASE_DIR / "media")))
+MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -153,10 +159,25 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_id",
 }
 
-# CORS
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_ALL_HEADERS = True
-CORS_ALLOW_CREDENTIALS = True
+# CORS — explicit origins for browser uploads from Vercel
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = False
+CORS_ALLOWED_ORIGINS = [
+    "https://breathe-esg-snowy-rho.vercel.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.vercel\.app$",
+]
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization",
+    "content-type",
+    "origin",
+    "x-organisation-slug",
+    "x-requested-with",
+]
 
 # File upload
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024   # 20 MB
