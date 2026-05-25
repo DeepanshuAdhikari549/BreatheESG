@@ -1,12 +1,17 @@
 import axios from 'axios';
 
+// Direct Render URL — Vercel /api proxy causes redirect loops with Django trailing slashes.
+export const RENDER_API_URL = 'https://breatheesg-khy4.onrender.com/api';
+
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD ? '/api' : 'http://localhost:8000/api');
+  (import.meta.env.PROD ? RENDER_API_URL : 'http://localhost:8000/api');
 
 const ORG_SLUG = 'breathe-esg';
 const TOKEN_KEY = 'token';
 const REFRESH_KEY = 'refresh';
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const getStoredToken = () => localStorage.getItem(TOKEN_KEY) || '';
 export const getStoredRefresh = () => localStorage.getItem(REFRESH_KEY) || '';
@@ -92,8 +97,45 @@ api.interceptors.response.use(
   }
 );
 
-export const loginRequest = (username, password) =>
-  api.post('/auth/login/', { username, password });
+/** Ping Render until the API responds (cold-start wake-up). */
+export const wakeServer = async (maxAttempts = 6) => {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      const res = await axios.get(`${RENDER_API_URL}/health/`, {
+        timeout: 90000,
+      });
+      if (res.status === 200) return true;
+    } catch {
+      // Render free tier can take 30–60s to wake up
+    }
+    if (attempt < maxAttempts - 1) {
+      await sleep(3000 + attempt * 2000);
+    }
+  }
+  return false;
+};
+
+export const loginRequest = async (username, password) => {
+  await wakeServer();
+
+  const maxAttempts = 3;
+  let lastError;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      return await api.post('/auth/login/', { username, password });
+    } catch (err) {
+      lastError = err;
+      if (err.response) throw err;
+      if (attempt < maxAttempts - 1) {
+        await wakeServer(2);
+        await sleep(2000);
+      }
+    }
+  }
+
+  throw lastError;
+};
 
 export const fetchCurrentUser = () => api.get('/auth/me/');
 

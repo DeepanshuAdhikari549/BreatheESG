@@ -192,7 +192,7 @@ export default function App() {
       setActiveTab('dashboard');
     } catch (err) {
       if (!err.response) {
-        setLoginError('Server is waking up. Please wait a moment and try again.');
+        setLoginError('Backend is starting up (this can take up to 60 seconds on free hosting). Please wait, then click Sign In again.');
       } else {
         const detail = err.response?.data?.detail;
         const message =
@@ -402,7 +402,7 @@ export default function App() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
                 </svg>
-                Signing In...
+                Connecting to server...
               </>) : 'Sign In'}
             </button>
           </form>
