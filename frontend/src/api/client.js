@@ -32,21 +32,59 @@ export const clearStoredTokens = () => {
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 120000,
-  headers: { 'Content-Type': 'application/json' },
 });
 
-api.interceptors.request.use((config) => {
+const authHeaders = () => {
   const token = getStoredToken();
+  const headers = {};
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-    config.headers['X-Organisation-Slug'] = ORG_SLUG;
+    headers.Authorization = `Bearer ${token}`;
+    headers['X-Organisation-Slug'] = ORG_SLUG;
   }
-  // FormData must not use application/json or a manual multipart type (no boundary).
-  if (config.data instanceof FormData) {
-    delete config.headers['Content-Type'];
+  return headers;
+};
+
+api.interceptors.request.use((config) => {
+  Object.assign(config.headers, authHeaders());
+  if (config.data && !(config.data instanceof FormData)) {
+    config.headers['Content-Type'] = 'application/json';
   }
   return config;
 });
+
+/** File uploads via fetch — avoids axios forcing application/json on FormData. */
+export const uploadBatch = async (file, sourceType) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('source_type', sourceType);
+
+  const response = await fetch(`${API_BASE_URL}/uploads/`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: formData,
+  });
+
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      clearStoredTokens();
+      window.dispatchEvent(new Event('auth:logout'));
+    }
+    const err = new Error(
+      typeof data.detail === 'string' ? data.detail : 'Failed to upload batch.'
+    );
+    err.response = { status: response.status, data };
+    throw err;
+  }
+
+  return { data };
+};
 
 let refreshPromise = null;
 

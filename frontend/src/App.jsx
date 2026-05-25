@@ -5,6 +5,7 @@ import api, {
   clearStoredTokens,
   loginRequest,
   fetchCurrentUser,
+  uploadBatch,
 } from './api/client';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -247,12 +248,8 @@ export default function App() {
     setUploadLoading(true);
     setUploadMessage(null);
     
-    const formData = new FormData();
-    formData.append('file', uploadFile);
-    formData.append('source_type', uploadSource);
-    
     try {
-      const res = await api.post('/uploads/', formData);
+      const res = await uploadBatch(uploadFile, uploadSource);
       handleUploadResponse(res.data, 'Batch uploaded and processed successfully!');
       setUploadFile(null);
       document.getElementById('file-upload-input').value = '';
@@ -272,12 +269,8 @@ export default function App() {
     const blob = new Blob([csvText], { type: 'text/csv' });
     const file = new File([blob], filename, { type: 'text/csv' });
     
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('source_type', sourceType);
-    
     try {
-      const res = await api.post('/uploads/', formData);
+      const res = await uploadBatch(file, sourceType);
       handleUploadResponse(res.data, `Sample ${sourceType} data injected and parsed successfully!`);
       fetchUploads();
       fetchDashboard();
