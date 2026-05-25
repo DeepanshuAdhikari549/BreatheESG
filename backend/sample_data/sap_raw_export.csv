@@ -1,0 +1,6 @@
+Buchungsdatum,Materialbezeichnung,Menge,Einheit,Kraftstofftyp,Buchungskreis,Kostenart,Werk
+01.03.2026,Fleet Diesel Refuel,"1500,50",L,diesel,DE01,Procurement,W102
+15.03.2026,Erdgas (Natural Gas) Heating,"4200,80",m3,natural gas,DE01,Utilities,W102
+20.03.2026,Benzin procurement for generators,"450,20",ltr,petrol,DE02,Operations,W103
+28.03.2026,Bulk Diesel storage delivery,"12500,00",litres,diesel,DE01,Procurement,W102
+15.06.2026,Future-Dated Fuel Delivery Test,"3000,00",L,diesel,DE02,Procurement,W103

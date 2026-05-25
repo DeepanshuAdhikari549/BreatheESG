@@ -1,0 +1,5 @@
+Account Number,Site Name,Site Code,Meter ID,Billing Period Start,Billing Period End,Usage kWh,Tariff,Supplier Ref
+UT-998213,Frankfurt Data Center,W102,MTR-8812,2026-01-01,2026-01-31,85230.5,Commercial Green,Vattenfall
+UT-998213,Frankfurt Data Center,W102,MTR-8812,2026-02-01,2026-02-28,91200.75,Commercial Green,Vattenfall
+UT-554109,Berlin Office HQ,W103,MTR-2041,2026-01-15,2026-02-14,4520.1,Standard Business,E.ON
+UT-554109,Berlin Office HQ,W103,MTR-2041,2026-02-15,2026-03-14,-500.0,Standard Business,E.ON
