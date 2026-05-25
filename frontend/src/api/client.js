@@ -3,9 +3,10 @@ import axios from 'axios';
 // Direct Render URL — Vercel /api proxy causes redirect loops with Django trailing slashes.
 export const RENDER_API_URL = 'https://breatheesg-khy4.onrender.com/api';
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD ? RENDER_API_URL : 'http://localhost:8000/api');
+// Always use Render in production (Vercel /api proxy causes redirect loops).
+const API_BASE_URL = import.meta.env.PROD
+  ? RENDER_API_URL
+  : (import.meta.env.VITE_API_URL || 'http://localhost:8000/api');
 
 const ORG_SLUG = 'breathe-esg';
 const TOKEN_KEY = 'token';
