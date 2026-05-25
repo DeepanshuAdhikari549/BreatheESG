@@ -70,7 +70,7 @@ export default function App() {
   
   // Base Axios configuration
   const api = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+    baseURL: 'https://breatheesg-khy4.onrender.com/api',
     headers: token ? {
       'Authorization': `Bearer ${token}`,
       'X-Organisation-Slug': 'breathe-esg'
